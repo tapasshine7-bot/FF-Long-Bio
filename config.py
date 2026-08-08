@@ -6,38 +6,33 @@
 
 SITE_CONFIG = {
     # Site Identity
-    "site_name": "THORYXFF",
-    "site_logo_emoji": "⚡",
+    "site_name": "REVOLVED",
+    "site_logo_emoji": "⚜️",
     
     # Free Fire Version
     "freefire_version": "OB54",
     
-    # Social Links (for popup)
-    "youtube_link": "https://www.youtube.com/@GamesOfThory",
-    "instagram_link": "https://www.instagram.com/THORYXFF",
+    
     
     # Popup Settings
     "promo_popup_enabled": False,
     
-    "popup_title": "⚡ JOIN THE COMMUNITY ⚡",
-    "popup_message": "Subscribe to YouTube & Follow on Instagram to unlock the Bio Injector!",
+     
     
     # Bio Settings
     "bio_char_limit": 300,
     "default_region": "IND",
     
     # Footer
-    "footer_text": "THORYXFF • Neon Bio Injector",   # ← comma is correct here!
+    "footer_text": "REVOLVED • Neon Bio Injector",   # ← comma is correct here!
     
-    # Video Tutorial Links
-    "howto_video_link": "https://youtu.be/VwWdm9UFZRM",
-    "create_own_video_link": "https://github.com/thory99/FF-Long-Bio",   # ← last line, no comma
+    
 
 
     "templates": [
   {
-    "name": "THORY SPECIAL",
-    "bio": "[B][C][I][FEA100]ㅤ ╭─⎾ Thory ⏋[FFFFFF] ↓[FF1493]IG THORYXFF[FFFFFF]↓\n╭┘▣│ᴀɪ ᴡᴏʀʟᴅ│[78CDFF]YT - GAMESOFTHORY\n[7AC279][U]└◎─┴─◎─◎[/U]┘[F5BE63]EMOTE BOT KE LIYE YT CHECK"
+    "name": "REVOLVED SPECIAL",
+    "bio": "[B][C][I][FEA100]ㅤ ╭─⎾ REVLVE ⏋[FFFFFF] ↓[FF1493] REVOLVEFF[FFFFFF]↓\n╭┘▣│ᴀɪ ᴡᴏʀʟᴅ│[78CDFF]YT - GAMESOFTHORY\n[7AC279][U]└◎─┴─◎─◎[/U]┘[F5BE63]EMOTE BOT KE LIYE YT CHECK"
   },
   {
     "name": "ATTITUDE SHAYARI",
