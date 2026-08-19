@@ -9,6 +9,9 @@ import requests
 import re
 import urllib.parse
 
+TOKEN_SERVICE_TLS_ERROR = "The token verification service has a certificate problem. Please try again later."
+TOKEN_SERVICE_UNAVAILABLE_ERROR = "The token verification service is temporarily unavailable. Please try again later."
+
 app = Flask(__name__)
 
 # Load configuration
@@ -101,8 +104,15 @@ def get_account_from_eat(eat_token):
         
         return jwt_token, account_info, None
         
-    except Exception as e:
-        return None, None, str(e)
+    except requests.exceptions.SSLError:
+        # Do not weaken certificate validation or expose the token in a raw
+        # upstream exception. The service operator must repair its certificate
+        # chain before token verification can safely resume.
+        return None, None, TOKEN_SERVICE_TLS_ERROR
+    except requests.exceptions.RequestException:
+        return None, None, TOKEN_SERVICE_UNAVAILABLE_ERROR
+    except (TypeError, ValueError):
+        return None, None, "The token verification service returned an invalid response."
 
 def update_bio_with_jwt(jwt_token, bio_text, region):
     try:
@@ -161,7 +171,7 @@ def index():
 @app.route('/api/verify-token', methods=['POST'])
 def verify_token():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         eat_token = data.get('eat_token')
         
         if not eat_token:
