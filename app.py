@@ -82,27 +82,54 @@ def get_account_from_eat(eat_token):
             if match:
                 eat_token = match.group(1)
         
-        EAT_API_URL = "https://eat-api.thory.buzz/api"
-        response = requests.get(f"{EAT_API_URL}?eatjwt={eat_token}", timeout=15)
-        
-        if response.status_code != 200:
-            return None, None, f"API error: HTTP {response.status_code}"
-        
-        data = response.json()
-        if data.get('status') != 'success':
-            return None, None, f"Invalid token: {data.get('message', 'Unknown error')}"
-        
-        jwt_token = data.get('token')
-        if not jwt_token:
-            return None, None, "No JWT token in response"
-        
-        account_info = {
-            "uid": data.get('uid'),
-            "region": data.get('region', 'IND'),
-            "nickname": data.get('nickname')
-        }
-        
-        return jwt_token, account_info, None
+        # Primary: fflike.in official API (EAT -> JWT, CORS enabled, no key)
+        # Fallback: thory.buzz legacy API
+        services = [
+            {
+                "name": "fflike.in",
+                "build_url": lambda tok: f"https://access-token.fflike.in/api?eatjwt={tok}",
+                "needs_status": True,
+            },
+            {
+                "name": "thory.buzz",
+                "build_url": lambda tok: f"https://eat-api.thory.buzz/api?eatjwt={tok}",
+                "needs_status": False,
+            },
+        ]
+        last_error = None
+        saw_ssl = False
+        for svc in services:
+            try:
+                response = requests.get(svc["build_url"](eat_token), timeout=15)
+                if response.status_code != 200:
+                    last_error = f"API error: HTTP {response.status_code}"
+                    continue
+                data = response.json()
+                if svc["needs_status"] and data.get('status') != 'success':
+                    # A deliberate API rejection (invalid token) is final — no fallback
+                    return None, None, f"Invalid token: {data.get('message', 'Unknown error')}"
+                jwt_token = data.get('token')
+                if not jwt_token:
+                    last_error = "No JWT token in response"
+                    continue
+                account_info = {
+                    "uid": data.get('uid'),
+                    "region": data.get('region', 'IND'),
+                    "nickname": data.get('nickname')
+                }
+                return jwt_token, account_info, None
+            except requests.exceptions.SSLError:
+                saw_ssl = True
+                continue
+            except requests.exceptions.RequestException:
+                continue
+            except (TypeError, ValueError):
+                last_error = "The token verification service returned an invalid response."
+                continue
+        if last_error:
+            return None, None, last_error
+        # Every service failed before producing a response
+        return None, None, TOKEN_SERVICE_TLS_ERROR if saw_ssl else TOKEN_SERVICE_UNAVAILABLE_ERROR
         
     except requests.exceptions.SSLError:
         # Do not weaken certificate validation or expose the token in a raw
