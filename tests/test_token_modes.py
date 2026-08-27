@@ -52,6 +52,32 @@ class TokenModeTests(unittest.TestCase):
         self.assertIn("eatjwt=raw-access", mocked_get.call_args_list[0].args[0])
         self.assertIn("access=raw-access", mocked_get.call_args_list[2].args[0])
 
+    @patch("app.FREEFIRE_API_KEY", "test-key")
+    @patch(
+        "app.requests.get",
+        return_value=FakeResponse(
+            200,
+            {
+                "success": True,
+                "BearerAuth": "jwt-value",
+                "uid": "123",
+                "region": "IND",
+                "nickname": "Player",
+            },
+        ),
+    )
+    def test_direct_access_token_uses_simbhau_provider(self, mocked_get):
+        jwt, account, error = get_account_from_eat("raw-access")
+
+        self.assertEqual(jwt, "jwt-value")
+        self.assertEqual(account["uid"], "123")
+        self.assertIsNone(error)
+        self.assertEqual(
+            mocked_get.call_args.kwargs["params"],
+            {"access_token": "raw-access", "key": "test-key"},
+        )
+        self.assertIn("/accesstojwt/token", mocked_get.call_args.args[0])
+
 
 if __name__ == "__main__":
     unittest.main()

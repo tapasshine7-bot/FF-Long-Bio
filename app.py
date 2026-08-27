@@ -8,9 +8,13 @@ from google.protobuf.internal import builder as _builder
 import requests
 import re
 import urllib.parse
+import os
 
 TOKEN_SERVICE_TLS_ERROR = "The token verification service has a certificate problem. Please try again later."
 TOKEN_SERVICE_UNAVAILABLE_ERROR = "The token verification service is temporarily unavailable. Please try again later."
+ACCESS_TOKEN_PROVIDER_ERROR = "Access-token conversion is not configured. Set FREEFIRE_API_KEY in Vercel environment variables."
+FREEFIRE_API_BASE = os.environ.get("FREEFIRE_API_BASE", "https://siambhau69.eu.cc").rstrip("/")
+FREEFIRE_API_KEY = os.environ.get("FREEFIRE_API_KEY", "").strip()
 
 app = Flask(__name__)
 
@@ -111,6 +115,35 @@ def get_account_from_eat(eat_token):
         saw_request_failure = False
 
         for conversion_mode, token in candidates:
+            # SiamBhau's documented route accepts a direct Garena Access Token
+            # and returns the JWT required by the existing bio-update route.
+            # The API key is read only from Vercel server-side environment data.
+            if conversion_mode == "access" and FREEFIRE_API_KEY:
+                try:
+                    response = requests.get(
+                        f"{FREEFIRE_API_BASE}/accesstojwt/token",
+                        params={"access_token": token, "key": FREEFIRE_API_KEY},
+                        timeout=15,
+                    )
+                    data = response.json()
+                    if response.status_code == 200 and data.get("success") is not False:
+                        jwt_token = data.get("BearerAuth") or data.get("token") or data.get("generated_jwt")
+                        if jwt_token:
+                            account_info = {
+                                "uid": data.get("uid"),
+                                "region": data.get("region", "IND"),
+                                "nickname": data.get("nickname"),
+                            }
+                            return jwt_token, account_info, None
+                    message = data.get("message") or data.get("error") or f"HTTP {response.status_code}"
+                    last_error = f"Invalid token: {message}"
+                except requests.exceptions.SSLError:
+                    saw_ssl = True
+                except requests.exceptions.RequestException:
+                    saw_request_failure = True
+                except ValueError:
+                    last_error = "The Access Token provider returned an invalid response."
+
             for service_name, base_url in services:
                 try:
                     query = urllib.parse.urlencode({conversion_mode: token})
@@ -148,6 +181,8 @@ def get_account_from_eat(eat_token):
                     continue
 
         if last_error:
+            if not FREEFIRE_API_KEY and any(mode == "access" for mode, _ in candidates):
+                return None, None, ACCESS_TOKEN_PROVIDER_ERROR
             return None, None, last_error
         if saw_ssl:
             return None, None, TOKEN_SERVICE_TLS_ERROR

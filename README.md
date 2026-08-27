@@ -52,3 +52,17 @@ Click the **"Create Your Own Site"** button inside the tool to watch the step-by
 # 3. Import your repository
 # 4. Add environment variables (see below)
 # 5. Deploy - Done!
+
+
+## Deployment configuration
+
+For direct in-game Access Token conversion, configure these variables in the server environment or Vercel project settings. Never place the API key in frontend code or commit it to GitHub.
+
+```text
+FREEFIRE_API_KEY=your_provider_api_key
+FREEFIRE_API_BASE=https://siambhau69.eu.cc
+```
+
+`FREEFIRE_API_BASE` is optional and defaults to the HTTPS provider URL shown above. The site keeps the provider key server-side and sends it only from the backend conversion route.
+
+---
