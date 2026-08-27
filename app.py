@@ -71,66 +71,90 @@ def get_region_url(region):
     }
     return region_urls.get(region.upper(), "https://clientbp.ggpolarbear.com")
 
-def get_account_from_eat(eat_token):
+def _token_candidates(token_input):
+    """Return (conversion mode, token) candidates without exposing token values."""
+    raw = str(token_input or '').strip()
+    if not raw:
+        return []
+
+    # Redirect URLs are unambiguous and should use the matching API parameter.
     try:
-        if '?eat=' in eat_token:
-            parsed = urllib.parse.urlparse(eat_token)
-            params = urllib.parse.parse_qs(parsed.query)
-            eat_token = params.get('eat', [eat_token])[0]
-        elif '&eat=' in eat_token:
-            match = re.search(r'[?&]eat=([^&]+)', eat_token)
-            if match:
-                eat_token = match.group(1)
-        
-        # Primary: fflike.in official API (EAT -> JWT, CORS enabled, no key)
-        # Fallback: thory.buzz legacy API
+        parsed = urllib.parse.urlparse(raw)
+        params = urllib.parse.parse_qs(parsed.query)
+        for query_name, conversion_mode in (("eat", "eatjwt"), ("access", "access")):
+            value = params.get(query_name, [None])[0]
+            if value:
+                return [(conversion_mode, value)]
+    except (TypeError, ValueError):
+        pass
+
+    # A bare value may be either an EAT token or an access token. Try EAT first
+    # for backwards compatibility, then the documented Access -> JWT endpoint.
+    return [("eatjwt", raw), ("access", raw)]
+
+
+def get_account_from_eat(eat_token):
+    """Convert an EAT or access token into the JWT used by the game API."""
+    try:
+        candidates = _token_candidates(eat_token)
+        if not candidates:
+            return None, None, "Missing EAT or access token"
+
+        # fflike.in is the documented service. thory.buzz remains a legacy
+        # fallback for EAT/JWT conversion when the primary service is down.
         services = [
-            {
-                "name": "fflike.in",
-                "build_url": lambda tok: f"https://access-token.fflike.in/api?eatjwt={tok}",
-                "needs_status": True,
-            },
-            {
-                "name": "thory.buzz",
-                "build_url": lambda tok: f"https://eat-api.thory.buzz/api?eatjwt={tok}",
-                "needs_status": False,
-            },
+            ("fflike.in", "https://access-token.fflike.in/api"),
+            ("thory.buzz", "https://eat-api.thory.buzz/api"),
         ]
         last_error = None
         saw_ssl = False
-        for svc in services:
-            try:
-                response = requests.get(svc["build_url"](eat_token), timeout=15)
-                if response.status_code != 200:
-                    last_error = f"API error: HTTP {response.status_code}"
+        saw_request_failure = False
+
+        for conversion_mode, token in candidates:
+            for service_name, base_url in services:
+                try:
+                    query = urllib.parse.urlencode({conversion_mode: token})
+                    response = requests.get(f"{base_url}?{query}", timeout=15)
+
+                    try:
+                        data = response.json()
+                    except ValueError:
+                        last_error = f"{service_name} returned an invalid response (HTTP {response.status_code})"
+                        continue
+
+                    if response.status_code != 200 or data.get('status') == 'error':
+                        message = data.get('message') or data.get('error') or f"HTTP {response.status_code}"
+                        last_error = f"Invalid token: {message}"
+                        # A bare token can still be the other supported type;
+                        # continue to the next candidate instead of stopping here.
+                        continue
+
+                    jwt_token = data.get('token')
+                    if not jwt_token:
+                        last_error = f"{service_name} returned no JWT token"
+                        continue
+
+                    account_info = {
+                        "uid": data.get('uid') or data.get('account_id'),
+                        "region": data.get('region', 'IND'),
+                        "nickname": data.get('nickname')
+                    }
+                    return jwt_token, account_info, None
+                except requests.exceptions.SSLError:
+                    saw_ssl = True
                     continue
-                data = response.json()
-                if svc["needs_status"] and data.get('status') != 'success':
-                    # A deliberate API rejection (invalid token) is final — no fallback
-                    return None, None, f"Invalid token: {data.get('message', 'Unknown error')}"
-                jwt_token = data.get('token')
-                if not jwt_token:
-                    last_error = "No JWT token in response"
+                except requests.exceptions.RequestException:
+                    saw_request_failure = True
                     continue
-                account_info = {
-                    "uid": data.get('uid'),
-                    "region": data.get('region', 'IND'),
-                    "nickname": data.get('nickname')
-                }
-                return jwt_token, account_info, None
-            except requests.exceptions.SSLError:
-                saw_ssl = True
-                continue
-            except requests.exceptions.RequestException:
-                continue
-            except (TypeError, ValueError):
-                last_error = "The token verification service returned an invalid response."
-                continue
+
         if last_error:
             return None, None, last_error
-        # Every service failed before producing a response
-        return None, None, TOKEN_SERVICE_TLS_ERROR if saw_ssl else TOKEN_SERVICE_UNAVAILABLE_ERROR
-        
+        if saw_ssl:
+            return None, None, TOKEN_SERVICE_TLS_ERROR
+        if saw_request_failure:
+            return None, None, TOKEN_SERVICE_UNAVAILABLE_ERROR
+        return None, None, TOKEN_SERVICE_UNAVAILABLE_ERROR
+
     except requests.exceptions.SSLError:
         # Do not weaken certificate validation or expose the token in a raw
         # upstream exception. The service operator must repair its certificate
