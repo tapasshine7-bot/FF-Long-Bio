@@ -200,7 +200,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;
 <div class="topbar">
   <div class="brand">
     <div class="brand-icon">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <img src="/static/ff-long-bio-purple-ornate-bull.png" width="27" height="27" alt="Purple ornate bull" style="display:block;object-fit:contain;filter:drop-shadow(0 0 5px rgba(176,72,255,.9));" />
     </div>
     <div class="brand-name" id="siteName">FF BIO TOOL</div>
   </div>
@@ -650,6 +650,12 @@ function onTokenInput(){
     document.getElementById('tokenBadge').textContent = 'Set';
     document.getElementById('tokenBadge').className = 'badge badge-ok';
     clearTimeout(window._fetchTimer);
+    const isCopiedNonEatToken = window._recentCopiedToken && v === window._recentCopiedToken && window._recentCopiedTokenKind !== 'eat';
+    const isJwtToken = v.startsWith('eyJ') && v.split('.').length === 3;
+    if(isCopiedNonEatToken || isJwtToken){
+      document.getElementById('fetchingInfo').style.display = 'none';
+      return;
+    }
     window._fetchTimer = setTimeout(()=>fetchPlayer(v), 900);
   } else {
     document.getElementById('tokenBadge').textContent = 'Not Set';
@@ -741,6 +747,8 @@ async function convertToken(parameter,resultId,button){
 function copyGeneratedToken(resultId){
   let token = document.getElementById(resultId).textContent.trim();
   if(!token || token === 'Conversion failed'){ toast('No token to copy'); return; }
+  window._recentCopiedToken = token;
+  window._recentCopiedTokenKind = resultId === 'eatAccessResult' ? 'access' : 'jwt';
   navigator.clipboard.writeText(token).then(()=>toast('Token copied!')).catch(()=>toast('Copy failed'));
 }
 
