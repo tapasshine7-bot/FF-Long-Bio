@@ -650,12 +650,6 @@ function onTokenInput(){
     document.getElementById('tokenBadge').textContent = 'Set';
     document.getElementById('tokenBadge').className = 'badge badge-ok';
     clearTimeout(window._fetchTimer);
-    const isCopiedNonEatToken = window._recentCopiedToken && v === window._recentCopiedToken && window._recentCopiedTokenKind !== 'eat';
-    const isJwtToken = v.startsWith('eyJ') && v.split('.').length === 3;
-    if(isCopiedNonEatToken || isJwtToken){
-      document.getElementById('fetchingInfo').style.display = 'none';
-      return;
-    }
     window._fetchTimer = setTimeout(()=>fetchPlayer(v), 900);
   } else {
     document.getElementById('tokenBadge').textContent = 'Not Set';
@@ -747,8 +741,6 @@ async function convertToken(parameter,resultId,button){
 function copyGeneratedToken(resultId){
   let token = document.getElementById(resultId).textContent.trim();
   if(!token || token === 'Conversion failed'){ toast('No token to copy'); return; }
-  window._recentCopiedToken = token;
-  window._recentCopiedTokenKind = resultId === 'eatAccessResult' ? 'access' : 'jwt';
   navigator.clipboard.writeText(token).then(()=>toast('Token copied!')).catch(()=>toast('Copy failed'));
 }
 
