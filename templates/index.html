@@ -180,6 +180,17 @@ body::before{content:'';position:fixed;inset:0;z-index:0;
 
 .mb10{margin-bottom:10px}
 .mt10{margin-top:10px}
+
+/* Inline token conversion cards: intentionally isolated below the existing token input. */
+.token-converter-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:3px 0 11px}
+.token-converter-card{min-width:0;background:rgba(0,0,0,.27);border:1px solid var(--bd);border-radius:11px;padding:9px 7px;box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
+.token-converter-title{font-size:.66rem;font-weight:700;letter-spacing:.75px;color:var(--txt2);text-align:center;white-space:nowrap;margin-bottom:7px}
+.token-convert-btn{padding:7px 5px;font-size:.68rem;border-radius:8px;letter-spacing:.45px}
+.token-result-wrap{display:none;gap:6px;align-items:stretch;flex-direction:column;margin-top:7px}
+.token-result{display:block;color:var(--suc);font-family:'JetBrains Mono',monospace;font-size:.62rem;line-height:1.35;word-break:break-all;background:rgba(0,0,0,.48);border:1px solid rgba(63,255,200,.28);border-radius:7px;padding:7px;max-height:72px;overflow:auto}
+.token-copy-btn{border:1px solid rgba(63,255,200,.34);border-radius:7px;background:rgba(63,255,200,.09);color:var(--suc);font-family:'Rajdhani',sans-serif;font-size:.62rem;font-weight:700;letter-spacing:.7px;padding:5px;cursor:pointer}
+.token-copy-btn:hover{background:rgba(63,255,200,.17)}
+@media(max-width:420px){.token-converter-grid{gap:5px}.token-converter-card{padding:8px 4px}.token-converter-title{font-size:.58rem;letter-spacing:.35px}.token-convert-btn{font-size:.6rem;padding:7px 3px}.token-result{font-size:.56rem;padding:6px}.token-copy-btn{font-size:.57rem}}
 </style>
 </head>
 <body>
@@ -282,8 +293,29 @@ body::before{content:'';position:fixed;inset:0;z-index:0;
         <button class="paste-btn" onclick="pasteToken()" title="Paste">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
         </button>
+            </div>
+
+      <!-- Three endpoint cards intentionally sit directly below the existing paste-token control. -->
+      <div class="token-converter-grid" aria-label="Token conversion endpoints">
+        <div class="token-converter-card">
+          <div class="token-converter-title">EAT → ACCESS</div>
+          <button class="btn btn-primary token-convert-btn" type="button" onclick="convertToken('eat','eatAccessResult',this)">CONVERT</button>
+          <div class="token-result-wrap" id="eatAccessResultWrap"><code class="token-result" id="eatAccessResult"></code><button class="token-copy-btn" type="button" onclick="copyGeneratedToken('eatAccessResult')">COPY TOKEN</button></div>
+        </div>
+        <div class="token-converter-card">
+          <div class="token-converter-title">EAT → JWT</div>
+          <button class="btn btn-primary token-convert-btn" type="button" onclick="convertToken('eatjwt','eatJwtResult',this)">CONVERT</button>
+          <div class="token-result-wrap" id="eatJwtResultWrap"><code class="token-result" id="eatJwtResult"></code><button class="token-copy-btn" type="button" onclick="copyGeneratedToken('eatJwtResult')">COPY TOKEN</button></div>
+        </div>
+        <div class="token-converter-card">
+          <div class="token-converter-title">ACCESS → JWT</div>
+          <button class="btn btn-primary token-convert-btn" type="button" onclick="convertToken('access','accessJwtResult',this)">CONVERT</button>
+          <div class="token-result-wrap" id="accessJwtResultWrap"><code class="token-result" id="accessJwtResult"></code><button class="token-copy-btn" type="button" onclick="copyGeneratedToken('accessJwtResult')">COPY TOKEN</button></div>
+        </div>
       </div>
+
       <div id="fetchingInfo" style="display:none;text-align:center;padding:8px;color:var(--txt3);font-size:.75rem;">
+
         <span class="spin">&#8635;</span> Fetching player info…
       </div>
       <div id="playerInfo" class="info-box" style="display:none;">
@@ -654,14 +686,62 @@ async function fetchPlayer(token){
 }
 
 async function pasteToken(){
-  try{ 
-    let t = await navigator.clipboard.readText(); 
-    document.getElementById('tokenInput').value = t; 
-    onTokenInput(); 
-    toast('Token pasted!'); 
-  } catch(e){ 
-    toast('Long-press to paste'); 
+  try{
+    let t = await navigator.clipboard.readText();
+    document.getElementById('tokenInput').value = t;
+    onTokenInput();
+    toast('Token pasted!');
+  } catch(e){
+    toast('Long-press to paste');
   }
+}
+
+function tokenFromInput(parameter){
+  let raw = document.getElementById('tokenInput').value.trim();
+  if(!raw){ toast('Paste your token first!'); return null; }
+  try{
+    if(raw.includes('?')){
+      let parsed = new URL(raw);
+      let value = parsed.searchParams.get(parameter) || parsed.searchParams.get('eat') || parsed.searchParams.get('access');
+      if(value) return value;
+    }
+  }catch(e){}
+  return raw;
+}
+
+async function convertToken(parameter,resultId,button){
+  let token = tokenFromInput(parameter);
+  if(!token) return;
+  let result = document.getElementById(resultId);
+  let wrap = document.getElementById(resultId + 'Wrap');
+  let original = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = 'LOADING…';
+  wrap.style.display = 'none';
+  try{
+    let res = await fetch('https://access-token.fflike.in/api?' + parameter + '=' + encodeURIComponent(token), {headers:{Accept:'application/json'}});
+    let text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch(e){ data = {status:'error',message:text}; }
+    let output = parameter === 'eat' ? data.access_token : data.token;
+    if(!res.ok || data.status === 'error' || data.error || !output) throw new Error(data.message || data.error || 'Conversion failed');
+    result.textContent = output;
+    wrap.style.display = 'flex';
+    toast('Token generated!');
+  }catch(e){
+    result.textContent = '';
+    wrap.style.display = 'none';
+    toast(e.message || 'Request failed');
+  }finally{
+    button.disabled = false;
+    button.innerHTML = original;
+  }
+}
+
+function copyGeneratedToken(resultId){
+  let token = document.getElementById(resultId).textContent.trim();
+  if(!token || token === 'Conversion failed'){ toast('No token to copy'); return; }
+  navigator.clipboard.writeText(token).then(()=>toast('Token copied!')).catch(()=>toast('Copy failed'));
 }
 
 function updateHomePrev(){
